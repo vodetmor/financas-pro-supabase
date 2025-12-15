@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { AppState, TeamMember, TransactionType, Service } from '../types';
 import { Users, Plus, Pencil, Trash2, X, CheckSquare, Settings, Calculator, PieChart as PieIcon, Briefcase, Calendar } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
