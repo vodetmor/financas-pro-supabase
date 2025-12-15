@@ -62,9 +62,10 @@ interface OffersProps {
   onUpdateOffer: (id: string, updates: Partial<Offer>) => void;
   onDeleteOffer: (id: string) => void;
   visualizationCurrency: string;
+  setVisualizationCurrency: (currency: string) => void;
 }
 
-export const Offers: React.FC<OffersProps> = ({ data, onAddOffer, onUpdateOffer, onDeleteOffer, visualizationCurrency }) => {
+export const Offers: React.FC<OffersProps> = ({ data, onAddOffer, onUpdateOffer, onDeleteOffer, visualizationCurrency, setVisualizationCurrency }) => {
   const [selectedOfferId, setSelectedOfferId] = useState<string | null>(null);
   const [isNewOfferModalOpen, setIsNewOfferModalOpen] = useState(false);
 
@@ -262,13 +263,29 @@ export const Offers: React.FC<OffersProps> = ({ data, onAddOffer, onUpdateOffer,
           <p className="text-slate-500">Rastreamento diário de performance e comissões</p>
         </div>
 
-        <button
-          onClick={() => setIsNewOfferModalOpen(true)}
-          className="flex items-center px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors h-10"
-        >
-          <Plus size={18} className="mr-2" />
-          Nova Oferta
-        </button>
+        <div className="flex flex-col sm:flex-row gap-3 items-end sm:items-center">
+          {/* Currency Selector */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200 h-10">
+            <DollarSign size={16} className="text-slate-400" />
+            <select
+              value={visualizationCurrency}
+              onChange={(e) => setVisualizationCurrency(e.target.value)}
+              className="bg-transparent text-sm font-medium text-slate-700 outline-none cursor-pointer"
+            >
+              {CURRENCIES.map(c => (
+                <option key={c.code} value={c.code}>{c.code} - {c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            onClick={() => setIsNewOfferModalOpen(true)}
+            className="flex items-center px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors h-10"
+          >
+            <Plus size={18} className="mr-2" />
+            Nova Oferta
+          </button>
+        </div>
       </div>
 
       {/* --- GLOBAL OFFERS CHART SECTION --- */}
@@ -1195,15 +1212,15 @@ const OfferDetailModal = ({ offer, data, onClose, onUpdate, onDelete }: { offer:
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm text-center">
                   <p className="text-xs font-bold text-slate-400 uppercase">Faturamento Total</p>
-                  <p className="text-2xl font-bold text-blue-600 mt-2">R$ {totalRevenue.toLocaleString('pt-BR')}</p>
+                  <p className="text-2xl font-bold text-blue-600 mt-2">{formatCurrency(convertFromBRL(totalRevenue), visualizationCurrency)}</p>
                 </div>
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm text-center">
                   <p className="text-xs font-bold text-slate-400 uppercase">Investimento Ads</p>
-                  <p className="text-2xl font-bold text-rose-600 mt-2">R$ {totalAds.toLocaleString('pt-BR')}</p>
+                  <p className="text-2xl font-bold text-rose-600 mt-2">{formatCurrency(convertFromBRL(totalAds), visualizationCurrency)}</p>
                 </div>
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm text-center">
                   <p className="text-xs font-bold text-slate-400 uppercase">Lucro Líquido</p>
-                  <p className="text-2xl font-bold text-emerald-600 mt-2">R$ {totalProfit.toLocaleString('pt-BR')}</p>
+                  <p className="text-2xl font-bold text-emerald-600 mt-2">{formatCurrency(convertFromBRL(totalProfit), visualizationCurrency)}</p>
                 </div>
               </div>
 
@@ -1213,7 +1230,7 @@ const OfferDetailModal = ({ offer, data, onClose, onUpdate, onDelete }: { offer:
                     <p className="text-sm font-bold text-blue-900 uppercase">Repasse Total para Equipe</p>
                     <p className="text-xs text-blue-700 mt-1">Acumulado de todos os dias</p>
                   </div>
-                  <p className="text-3xl font-bold text-blue-600">R$ {totalTeamPayout.toLocaleString('pt-BR')}</p>
+                  <p className="text-3xl font-bold text-blue-600">{formatCurrency(convertFromBRL(totalTeamPayout), visualizationCurrency)}</p>
                 </div>
               </div>
             </div>
@@ -1400,12 +1417,12 @@ const OfferDetailModal = ({ offer, data, onClose, onUpdate, onDelete }: { offer:
                     {localOffer.dailyEntries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(entry => (
                       <tr key={entry.id} className="hover:bg-slate-50">
                         <td className="px-6 py-4 text-slate-900">{new Date(entry.date).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                        <td className="px-6 py-4 text-right font-medium text-blue-600">R$ {entry.revenue.toLocaleString('pt-BR')}</td>
-                        <td className="px-6 py-4 text-right font-medium text-rose-600">R$ {entry.adsSpend.toLocaleString('pt-BR')}</td>
-                        <td className="px-6 py-4 text-right font-bold text-emerald-600">R$ {entry.netProfit.toLocaleString('pt-BR')}</td>
+                        <td className="px-6 py-4 text-right font-medium text-blue-600">{formatCurrency(convertFromBRL(entry.revenue), visualizationCurrency)}</td>
+                        <td className="px-6 py-4 text-right font-medium text-rose-600">{formatCurrency(convertFromBRL(entry.adsSpend), visualizationCurrency)}</td>
+                        <td className="px-6 py-4 text-right font-bold text-emerald-600">{formatCurrency(convertFromBRL(entry.netProfit), visualizationCurrency)}</td>
                         {/* DYNAMIC TEAM SHARE DISPLAY */}
                         <td className="px-6 py-4 text-right text-indigo-600">
-                          R$ {calculateDynamicEntryShare(entry).toLocaleString('pt-BR')}
+                          {formatCurrency(convertFromBRL(calculateDynamicEntryShare(entry)), visualizationCurrency)}
                         </td>
                         <td className="px-6 py-4 text-right">
                           <button onClick={() => deleteEntry(entry.id)} className="text-slate-300 hover:text-rose-500">

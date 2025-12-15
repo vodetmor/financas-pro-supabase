@@ -20,6 +20,7 @@ interface FinancialsProps {
   onUpdateSubscription: (id: string, updates: Partial<Subscription>) => void;
   onDeleteSubscription: (id: string) => void;
   visualizationCurrency: string;
+  setVisualizationCurrency: (currency: string) => void;
 }
 
 export const Financials: React.FC<FinancialsProps> = ({
@@ -30,7 +31,8 @@ export const Financials: React.FC<FinancialsProps> = ({
   onAddSubscription,
   onUpdateSubscription,
   onDeleteSubscription,
-  visualizationCurrency
+  visualizationCurrency,
+  setVisualizationCurrency
 }) => {
   const [activeTab, setActiveTab] = useState<'transactions' | 'subscriptions'>('transactions');
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
@@ -285,19 +287,35 @@ export const Financials: React.FC<FinancialsProps> = ({
           <h1 className="text-2xl font-bold text-slate-900">Financeiro</h1>
           <p className="text-slate-500">Gestão de fluxo de caixa e recorrências</p>
         </div>
-        <div className="flex bg-slate-100 rounded-lg p-1">
-          <button
-            onClick={() => setActiveTab('transactions')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'transactions' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            Fluxo de Caixa
-          </button>
-          <button
-            onClick={() => setActiveTab('subscriptions')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'subscriptions' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            Assinaturas
-          </button>
+        <div className="flex flex-col sm:flex-row gap-3 items-end sm:items-center">
+          {/* Currency Selector */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
+            <DollarSign size={16} className="text-slate-400" />
+            <select
+              value={visualizationCurrency}
+              onChange={(e) => setVisualizationCurrency(e.target.value)}
+              className="bg-transparent text-sm font-medium text-slate-700 outline-none cursor-pointer"
+            >
+              {CURRENCIES.map(c => (
+                <option key={c.code} value={c.code}>{c.code} - {c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex bg-slate-100 rounded-lg p-1">
+            <button
+              onClick={() => setActiveTab('transactions')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'transactions' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Fluxo de Caixa
+            </button>
+            <button
+              onClick={() => setActiveTab('subscriptions')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'subscriptions' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Assinaturas
+            </button>
+          </div>
         </div>
       </div>
 

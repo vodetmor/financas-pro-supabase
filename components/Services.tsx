@@ -69,12 +69,14 @@ interface ServicesProps {
   onUpdateTransaction: (id: string, updates: Partial<Transaction>) => void;
   onDeleteTransaction: (id: string) => void;
   visualizationCurrency: string;
+  setVisualizationCurrency: (currency: string) => void;
 }
 
 export const Services: React.FC<ServicesProps> = ({
   data, onAddService, onUpdateService, onDeleteService,
   onAddTransaction, onUpdateTransaction, onDeleteTransaction,
-  visualizationCurrency
+  visualizationCurrency,
+  setVisualizationCurrency,
 }) => {
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [isNewServiceModalOpen, setIsNewServiceModalOpen] = useState(false);
@@ -227,7 +229,12 @@ export const Services: React.FC<ServicesProps> = ({
         label = dateObj.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
       }
 
-      return { name: label, ...val };
+      return {
+        name: label,
+        revenue: convertFromBRL(val.revenue),
+        expense: convertFromBRL(val.expense),
+        profit: convertFromBRL(val.profit)
+      };
     });
   };
 
@@ -280,13 +287,29 @@ export const Services: React.FC<ServicesProps> = ({
           <h1 className="text-2xl font-bold text-slate-900">Gestão de Serviços</h1>
           <p className="text-slate-500">Controle operacional e financeiro de projetos</p>
         </div>
-        <button
-          onClick={() => setIsNewServiceModalOpen(true)}
-          className="flex items-center px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors h-10"
-        >
-          <Plus size={18} className="mr-2" />
-          Novo Projeto
-        </button>
+        <div className="flex flex-col sm:flex-row gap-3 items-end sm:items-center">
+          {/* Currency Selector */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200 h-10">
+            <DollarSign size={16} className="text-slate-400" />
+            <select
+              value={visualizationCurrency}
+              onChange={(e) => setVisualizationCurrency(e.target.value)}
+              className="bg-transparent text-sm font-medium text-slate-700 outline-none cursor-pointer"
+            >
+              {CURRENCIES.map(c => (
+                <option key={c.code} value={c.code}>{c.code} - {c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            onClick={() => setIsNewServiceModalOpen(true)}
+            className="flex items-center px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors h-10"
+          >
+            <Plus size={18} className="mr-2" />
+            Novo Projeto
+          </button>
+        </div>
       </div>
 
       {/* --- SERVICES CHART SECTION --- */}
@@ -359,15 +382,15 @@ export const Services: React.FC<ServicesProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
             <p className="text-xs font-bold text-slate-400 uppercase">Receita Realizada (Serviços)</p>
-            <p className="text-xl font-bold text-blue-600 mt-1">R$ {chartTotals.revenue.toLocaleString('pt-BR')}</p>
+            <p className="text-xl font-bold text-blue-600 mt-1">{formatCurrency(chartTotals.revenue, visualizationCurrency)}</p>
           </div>
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
             <p className="text-xs font-bold text-slate-400 uppercase">Despesas Vinculadas</p>
-            <p className="text-xl font-bold text-rose-600 mt-1">R$ {chartTotals.expense.toLocaleString('pt-BR')}</p>
+            <p className="text-xl font-bold text-rose-600 mt-1">{formatCurrency(chartTotals.expense, visualizationCurrency)}</p>
           </div>
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
             <p className="text-xs font-bold text-slate-400 uppercase">Lucro Operacional</p>
-            <p className="text-xl font-bold text-emerald-600 mt-1">R$ {chartTotals.profit.toLocaleString('pt-BR')}</p>
+            <p className="text-xl font-bold text-emerald-600 mt-1">{formatCurrency(chartTotals.profit, visualizationCurrency)}</p>
           </div>
         </div>
 
@@ -412,7 +435,7 @@ export const Services: React.FC<ServicesProps> = ({
                 <Tooltip
                   cursor={{ fill: '#f1f5f9' }}
                   contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']}
+                  formatter={(value: number) => [formatCurrency(value, visualizationCurrency), '']}
                 />
                 <Bar dataKey="revenue" name="Receita" fill={COL_REVENUE} radius={[4, 4, 0, 0]} barSize={20} fillOpacity={0.9} />
                 <Bar dataKey="expense" name="Despesa" fill={COL_EXPENSE} radius={[4, 4, 0, 0]} barSize={20} fillOpacity={0.9} />
@@ -424,7 +447,7 @@ export const Services: React.FC<ServicesProps> = ({
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(value) => `R$${value / 1000}k`} domain={[0, 'auto']} />
                 <Tooltip
                   contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']}
+                  formatter={(value: number) => [formatCurrency(value, visualizationCurrency), '']}
                 />
                 <Line type="monotone" dataKey="revenue" name="Receita" stroke={COL_REVENUE} strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
                 <Line type="monotone" dataKey="expense" name="Despesa" stroke={COL_EXPENSE} strokeWidth={3} dot={false} />
@@ -445,7 +468,7 @@ export const Services: React.FC<ServicesProps> = ({
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR')}`} />
+                <Tooltip formatter={(value: number) => formatCurrency(value, visualizationCurrency)} />
                 <Legend verticalAlign="middle" align="right" layout="vertical" iconType="circle" />
               </PieChart>
             ) : (
@@ -535,12 +558,12 @@ export const Services: React.FC<ServicesProps> = ({
                 <div className="flex flex-col items-end min-w-[140px] gap-2">
                   <div className="text-right">
                     <span className="block text-xs text-slate-400 uppercase font-semibold">Valor Total</span>
-                    <span className="block font-bold text-slate-900">R$ {service.value.toLocaleString('pt-BR')}</span>
+                    <span className="block font-bold text-slate-900">{formatCurrency(convertFromBRL(service.value), visualizationCurrency)}</span>
                   </div>
                   <div className="text-right">
                     <span className="block text-xs text-slate-400 uppercase font-semibold">Recebido</span>
                     <span className={`block font-bold ${calculatedPaid >= service.value ? 'text-emerald-600' : 'text-blue-600'}`}>
-                      R$ {calculatedPaid.toLocaleString('pt-BR')}
+                      {formatCurrency(convertFromBRL(calculatedPaid), visualizationCurrency)}
                     </span>
                   </div>
                   <div className="w-full max-w-[140px] mt-1">

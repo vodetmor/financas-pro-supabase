@@ -404,6 +404,7 @@ const App: React.FC = () => {
                 onUpdateSubscription={updateSubscription}
                 onDeleteSubscription={deleteSubscription}
                 visualizationCurrency={visualizationCurrency}
+                setVisualizationCurrency={setVisualizationCurrency}
               />
             } />
             <Route path="/servicos" element={
@@ -416,6 +417,7 @@ const App: React.FC = () => {
                 onUpdateTransaction={updateTransaction}
                 onDeleteTransaction={deleteTransaction}
                 visualizationCurrency={visualizationCurrency}
+                setVisualizationCurrency={setVisualizationCurrency}
               />
             } />
             <Route path="/ofertas" element={
@@ -425,6 +427,7 @@ const App: React.FC = () => {
                 onUpdateOffer={updateOffer}
                 onDeleteOffer={deleteOffer}
                 visualizationCurrency={visualizationCurrency}
+                setVisualizationCurrency={setVisualizationCurrency}
               />
             } />
             <Route path="/lucros" element={
@@ -434,6 +437,7 @@ const App: React.FC = () => {
                 onUpdateMember={updateMember}
                 onDeleteMember={deleteMember}
                 visualizationCurrency={visualizationCurrency}
+                setVisualizationCurrency={setVisualizationCurrency}
               />
             } />
             <Route path="/checagem" element={<DailyCheck data={data} onUpdateOffer={updateOffer} visualizationCurrency={visualizationCurrency} />} />

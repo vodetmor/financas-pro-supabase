@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { AppState, TeamMember, TransactionType, Service } from '../types';
-import { Users, Plus, Pencil, Trash2, X, CheckSquare, Settings, Calculator, PieChart as PieIcon, Briefcase, Calendar } from 'lucide-react';
+import { Users, Plus, Pencil, Trash2, X, CheckSquare, Settings, Calculator, PieChart as PieIcon, Briefcase, Calendar, DollarSign } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { DateRangePicker } from './DateRangePicker';
 
@@ -11,11 +11,12 @@ interface ProfitShareProps {
   onUpdateMember: (id: string, updates: Partial<TeamMember>) => void;
   onDeleteMember: (id: string) => void;
   visualizationCurrency: string;
+  setVisualizationCurrency: (currency: string) => void;
 }
 
 import { CURRENCIES, fetchExchangeRates, formatCurrency } from '../services/currency';
 
-export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onUpdateMember, onDeleteMember, visualizationCurrency }) => {
+export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onUpdateMember, onDeleteMember, visualizationCurrency, setVisualizationCurrency }) => {
   const [isManaging, setIsManaging] = useState(false);
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
@@ -211,7 +212,21 @@ export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onU
         </div>
 
         {/* Date Filter Bar */}
-        <div className="flex flex-col items-end gap-2 relative z-20">
+        <div className="flex flex-col sm:flex-row gap-3 items-end sm:items-center relative z-20">
+          {/* Currency Selector */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
+            <DollarSign size={16} className="text-slate-400" />
+            <select
+              value={visualizationCurrency}
+              onChange={(e) => setVisualizationCurrency(e.target.value)}
+              className="bg-transparent text-sm font-medium text-slate-700 outline-none cursor-pointer"
+            >
+              {CURRENCIES.map(c => (
+                <option key={c.code} value={c.code}>{c.code} - {c.name}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="flex bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
             {['TODAY', 'WEEK', 'MONTH', 'ALL'].map((f) => (
               <button
