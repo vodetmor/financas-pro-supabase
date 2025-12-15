@@ -51,6 +51,8 @@ export const fetchAllData = async (): Promise<AppState> => {
             status: o.status as OfferStatus,
             payoutModel: o.payout_model as PayoutModel,
             teamPotPercent: Number(o.team_pot_percent),
+            currency: o.currency || 'BRL',
+            originalAmount: Number(o.original_amount || 0),
             startDate: o.start_date,
             endDate: o.end_date,
             active: o.active,
@@ -82,6 +84,8 @@ export const fetchAllData = async (): Promise<AppState> => {
             clientName: s.client_name,
             value: Number(s.value),
             amountPaid: Number(s.amount_paid),
+            currency: s.currency || 'BRL',
+            originalAmount: Number(s.original_amount || 0),
             status: s.status as ServiceStatus,
             offerId: s.offer_id,
             startDate: s.start_date,
@@ -117,6 +121,8 @@ export const fetchAllData = async (): Promise<AppState> => {
             category: t.category,
             description: t.description,
             amount: Number(t.amount),
+            currency: t.currency || 'BRL',
+            originalAmount: Number(t.original_amount || 0),
             status: t.status,
             serviceId: t.service_id,
             offerId: t.offer_id,
@@ -128,6 +134,8 @@ export const fetchAllData = async (): Promise<AppState> => {
             id: s.id,
             name: s.name,
             amount: Number(s.amount),
+            currency: s.currency || 'BRL',
+            originalAmount: Number(s.original_amount || 0),
             billingCycle: s.billing_cycle,
             firstPaymentDate: s.first_payment_date,
             nextPaymentDate: s.next_payment_date,
@@ -192,6 +200,8 @@ export const apiAddTransaction = async (t: Omit<Transaction, 'id'>) => {
         category: t.category,
         description: t.description,
         amount: t.amount,
+        currency: t.currency,
+        original_amount: t.originalAmount,
         status: t.status,
         service_id: t.serviceId,
         offer_id: t.offerId,
@@ -209,6 +219,8 @@ export const apiUpdateTransaction = async (id: string, updates: Partial<Transact
     if (updates.category) payload.category = updates.category;
     if (updates.description) payload.description = updates.description;
     if (updates.amount) payload.amount = updates.amount;
+    if (updates.currency) payload.currency = updates.currency;
+    if (updates.originalAmount) payload.original_amount = updates.originalAmount;
     if (updates.status) payload.status = updates.status;
     if (updates.serviceId !== undefined) payload.service_id = updates.serviceId;
     if (updates.offerId !== undefined) payload.offer_id = updates.offerId;
@@ -232,6 +244,8 @@ export const apiAddSubscription = async (s: Omit<Subscription, 'id'>) => {
     const { data, error } = await supabase.from('subscriptions').insert([{
         name: s.name,
         amount: s.amount,
+        currency: s.currency,
+        original_amount: s.originalAmount,
         billing_cycle: s.billingCycle,
         first_payment_date: s.firstPaymentDate,
         next_payment_date: s.nextPaymentDate,
@@ -248,6 +262,8 @@ export const apiUpdateSubscription = async (id: string, updates: Partial<Subscri
     const payload: any = {};
     if (updates.name) payload.name = updates.name;
     if (updates.amount) payload.amount = updates.amount;
+    if (updates.currency) payload.currency = updates.currency;
+    if (updates.originalAmount) payload.original_amount = updates.originalAmount;
     if (updates.nextPaymentDate) payload.next_payment_date = updates.nextPaymentDate;
     if (updates.active !== undefined) payload.active = updates.active;
     if (updates.notes !== undefined) payload.notes = updates.notes;
@@ -273,6 +289,8 @@ export const apiAddOffer = async (o: Omit<Offer, 'id'>) => {
         status: o.status,
         payout_model: o.payoutModel,
         team_pot_percent: o.teamPotPercent,
+        currency: o.currency,
+        original_amount: o.originalAmount,
         start_date: o.startDate,
         end_date: o.endDate,
         active: o.active
@@ -301,6 +319,8 @@ export const apiUpdateOffer = async (id: string, updates: Partial<Offer>) => {
     const coreUpdates: any = {};
     if (updates.name) coreUpdates.name = updates.name;
     if (updates.status) coreUpdates.status = updates.status;
+    if (updates.currency) coreUpdates.currency = updates.currency;
+    if (updates.originalAmount) coreUpdates.original_amount = updates.originalAmount;
     if (updates.startDate) coreUpdates.start_date = updates.startDate;
     if (updates.endDate) coreUpdates.end_date = updates.endDate;
     // TODO: Add other fields if editable in UI
@@ -363,6 +383,8 @@ export const apiAddService = async (s: Omit<Service, 'id'>) => {
         client_name: s.clientName,
         value: s.value,
         amount_paid: s.amountPaid,
+        currency: s.currency,
+        original_amount: s.originalAmount,
         status: s.status,
         offer_id: s.offerId,
         start_date: s.startDate,
@@ -398,6 +420,8 @@ export const apiUpdateService = async (id: string, updates: Partial<Service>) =>
     const core: any = {};
     if (updates.title) core.title = updates.title;
     if (updates.status) core.status = updates.status;
+    if (updates.currency) core.currency = updates.currency;
+    if (updates.originalAmount) core.original_amount = updates.originalAmount;
     if (updates.amountPaid !== undefined) core.amount_paid = updates.amountPaid;
 
     if (Object.keys(core).length > 0) {

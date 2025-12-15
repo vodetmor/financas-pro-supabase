@@ -10,20 +10,33 @@ interface ProfitShareProps {
   onAddMember: (m: Omit<TeamMember, 'id'>) => void;
   onUpdateMember: (id: string, updates: Partial<TeamMember>) => void;
   onDeleteMember: (id: string) => void;
+  visualizationCurrency: string;
 }
 
-export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onUpdateMember, onDeleteMember }) => {
+import { CURRENCIES, fetchExchangeRates, formatCurrency } from '../services/currency';
+
+export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onUpdateMember, onDeleteMember, visualizationCurrency }) => {
   const [isManaging, setIsManaging] = useState(false);
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
-  
+
   // Date Filter State
   const [dateFilter, setDateFilter] = useState<'TODAY' | 'WEEK' | 'MONTH' | 'ALL' | 'CUSTOM'>('MONTH');
   const [customDates, setCustomDates] = useState({ start: '', end: '' });
   const [showCustomPicker, setShowCustomPicker] = useState(false);
-  
+
   // Confirmation Modal State
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean, id: string | null }>({ isOpen: false, id: null });
+
+  // Rates
+  const [rates, setRates] = useState<Record<string, number>>({});
+  useEffect(() => { fetchExchangeRates().then(setRates); }, []);
+
+  const convertFromBRL = (amount: number) => {
+    if (visualizationCurrency === 'BRL') return amount;
+    const rate = rates[visualizationCurrency] || 1;
+    return amount / rate;
+  };
 
   // Ref for auto-scrolling to form
   const topRef = useRef<HTMLDivElement>(null);
@@ -41,17 +54,17 @@ export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onU
   // Filter Helpers
   const filterByDate = (items: any[], dateField: string) => {
     if (dateFilter === 'ALL') return items;
-    
-    if (dateFilter === 'CUSTOM') {
-       if (!customDates.start && !customDates.end) return items;
-       
-       const from = customDates.start ? new Date(customDates.start).setHours(0,0,0,0) : -Infinity;
-       const to = customDates.end ? new Date(customDates.end).setHours(23,59,59,999) : Infinity;
 
-       return items.filter(item => {
-          const t = new Date(item[dateField]).getTime();
-          return t >= from && t <= to;
-       });
+    if (dateFilter === 'CUSTOM') {
+      if (!customDates.start && !customDates.end) return items;
+
+      const from = customDates.start ? new Date(customDates.start).setHours(0, 0, 0, 0) : -Infinity;
+      const to = customDates.end ? new Date(customDates.end).setHours(23, 59, 59, 999) : Infinity;
+
+      return items.filter(item => {
+        const t = new Date(item[dateField]).getTime();
+        return t >= from && t <= to;
+      });
     }
 
     const now = new Date();
@@ -74,7 +87,7 @@ export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onU
     const revenue = filteredTransactions
       .filter(t => t.type === TransactionType.INCOME)
       .reduce((sum, t) => sum + t.amount, 0);
-    
+
     const expenses = filteredTransactions
       .filter(t => t.type === TransactionType.EXPENSE)
       .reduce((sum, t) => sum + t.amount, 0);
@@ -111,7 +124,7 @@ export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onU
       name: formData.name,
       role: formData.role,
       defaultSharePercent: Number(formData.defaultSharePercent),
-      avatarUrl: '', 
+      avatarUrl: '',
     };
 
     if (editingMember) {
@@ -120,7 +133,7 @@ export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onU
       onAddMember(payload);
     }
     resetForm();
-    setIsManaging(false); 
+    setIsManaging(false);
   };
 
   const handleDeleteClick = (id: string) => {
@@ -139,7 +152,7 @@ export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onU
     const count = members.length;
     if (count === 0) return;
     const share = Number((100 / count).toFixed(2));
-    
+
     // Distribute remaining decimals to first member
     const total = share * count;
     const diff = 100 - total;
@@ -172,7 +185,7 @@ export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onU
     const serviceIncome = filteredTransactions
       .filter(t => t.type === TransactionType.INCOME && t.serviceId === service.id)
       .reduce((acc, t) => acc + t.amount, 0);
-    
+
     // Expenses assigned to service
     const serviceExpense = filteredTransactions
       .filter(t => t.type === TransactionType.EXPENSE && t.serviceId === service.id)
@@ -183,7 +196,7 @@ export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onU
 
   return (
     <div ref={topRef} className="space-y-6">
-      <ConfirmModal 
+      <ConfirmModal
         isOpen={deleteConfirm.isOpen}
         title="Excluir Membro"
         message="Tem certeza que deseja excluir este membro da equipe? Ele será removido automaticamente de todos os projetos e transações associadas."
@@ -197,101 +210,99 @@ export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onU
           <p className="text-slate-500">Gestão de sócios e distribuição de resultados</p>
         </div>
 
-         {/* Date Filter Bar */}
-         <div className="flex flex-col items-end gap-2 relative z-20">
-            <div className="flex bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
+        {/* Date Filter Bar */}
+        <div className="flex flex-col items-end gap-2 relative z-20">
+          <div className="flex bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
             {['TODAY', 'WEEK', 'MONTH', 'ALL'].map((f) => (
-                <button
-                    key={f}
-                    onClick={() => {
-                        setDateFilter(f as any);
-                        setShowCustomPicker(false);
-                    }}
-                    className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${
-                    dateFilter === f ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'
-                    }`}
-                >
-                    {f === 'TODAY' ? 'Hoje' : f === 'WEEK' ? 'Semana' : f === 'MONTH' ? 'Mês' : 'Tudo'}
-                </button>
+              <button
+                key={f}
+                onClick={() => {
+                  setDateFilter(f as any);
+                  setShowCustomPicker(false);
+                }}
+                className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${dateFilter === f ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+              >
+                {f === 'TODAY' ? 'Hoje' : f === 'WEEK' ? 'Semana' : f === 'MONTH' ? 'Mês' : 'Tudo'}
+              </button>
             ))}
             <button
-                type="button"
-                onClick={(e) => {
-                    e.stopPropagation();
-                    setShowCustomPicker(!showCustomPicker);
-                }}
-                className={`px-3 py-1 rounded transition-colors flex items-center justify-center ${
-                    dateFilter === 'CUSTOM' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowCustomPicker(!showCustomPicker);
+              }}
+              className={`px-3 py-1 rounded transition-colors flex items-center justify-center ${dateFilter === 'CUSTOM' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'
                 }`}
-                title="Período Personalizado"
+              title="Período Personalizado"
             >
-                <Calendar size={14} />
+              <Calendar size={14} />
             </button>
-            </div>
+          </div>
 
-            {showCustomPicker && (
-                <DateRangePicker 
-                  startDate={customDates.start}
-                  endDate={customDates.end}
-                  onChange={(start, end) => {
-                    setCustomDates({ start, end });
-                    if (start && end) setDateFilter('CUSTOM');
-                  }}
-                  onClose={() => setShowCustomPicker(false)}
-                  onApply={() => { setShowCustomPicker(false); setDateFilter('CUSTOM'); }}
-                />
-            )}
+          {showCustomPicker && (
+            <DateRangePicker
+              startDate={customDates.start}
+              endDate={customDates.end}
+              onChange={(start, end) => {
+                setCustomDates({ start, end });
+                if (start && end) setDateFilter('CUSTOM');
+              }}
+              onClose={() => setShowCustomPicker(false)}
+              onApply={() => { setShowCustomPicker(false); setDateFilter('CUSTOM'); }}
+            />
+          )}
         </div>
       </div>
 
       <div className="flex gap-2 justify-end">
-          <button 
-            type="button"
-            onClick={() => setIsCalculatorOpen(!isCalculatorOpen)}
-            className={`flex items-center px-4 py-2 rounded-lg font-medium transition-colors border ${isCalculatorOpen ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
-          >
-            <Calculator size={18} className="mr-2" />
-            Calculadora
-          </button>
-          <button 
-            type="button"
-            onClick={() => { resetForm(); setIsManaging(!isManaging); }}
-            className={`flex items-center px-4 py-2 rounded-lg font-medium transition-colors ${isManaging ? 'bg-slate-200 text-slate-800' : 'bg-slate-900 text-white hover:bg-slate-800'}`}
-          >
-            {isManaging ? <X size={18} className="mr-2" /> : <Settings size={18} className="mr-2" />}
-            {isManaging ? 'Fechar Gestão' : 'Gerenciar Equipe'}
-          </button>
+        <button
+          type="button"
+          onClick={() => setIsCalculatorOpen(!isCalculatorOpen)}
+          className={`flex items-center px-4 py-2 rounded-lg font-medium transition-colors border ${isCalculatorOpen ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
+        >
+          <Calculator size={18} className="mr-2" />
+          Calculadora
+        </button>
+        <button
+          type="button"
+          onClick={() => { resetForm(); setIsManaging(!isManaging); }}
+          className={`flex items-center px-4 py-2 rounded-lg font-medium transition-colors ${isManaging ? 'bg-slate-200 text-slate-800' : 'bg-slate-900 text-white hover:bg-slate-800'}`}
+        >
+          {isManaging ? <X size={18} className="mr-2" /> : <Settings size={18} className="mr-2" />}
+          {isManaging ? 'Fechar Gestão' : 'Gerenciar Equipe'}
+        </button>
       </div>
 
       {/* Global Summary Card */}
       <div className="bg-slate-900 rounded-xl p-6 text-white shadow-lg">
         <div className="flex items-center gap-2 mb-4 opacity-75">
-            <Calendar size={14} />
-            <span className="text-xs font-medium uppercase tracking-wider">
-                {dateFilter === 'ALL' ? 'Todo o Período' : 
-                 dateFilter === 'TODAY' ? 'Hoje' :
-                 dateFilter === 'WEEK' ? 'Esta Semana' :
-                 dateFilter === 'MONTH' ? 'Este Mês' : 'Período Personalizado'}
-            </span>
+          <Calendar size={14} />
+          <span className="text-xs font-medium uppercase tracking-wider">
+            {dateFilter === 'ALL' ? 'Todo o Período' :
+              dateFilter === 'TODAY' ? 'Hoje' :
+                dateFilter === 'WEEK' ? 'Esta Semana' :
+                  dateFilter === 'MONTH' ? 'Este Mês' : 'Período Personalizado'}
+          </span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-center md:text-left">
           <div className="col-span-1 md:col-span-1">
-             <p className="text-slate-400 text-xs uppercase tracking-wider font-semibold">Lucro Líquido (Período)</p>
-             <h2 className="text-3xl font-bold mt-1 text-emerald-400">R$ {pool.profit.toLocaleString('pt-BR')}</h2>
+            <p className="text-slate-400 text-xs uppercase tracking-wider font-semibold">Lucro Líquido (Período)</p>
+            <h2 className="text-3xl font-bold mt-1 text-emerald-400">{formatCurrency(convertFromBRL(pool.profit), visualizationCurrency)}</h2>
           </div>
           <div className="border-t md:border-t-0 md:border-l border-slate-700 pt-4 md:pt-0 md:pl-6">
-             <p className="text-slate-400 text-xs">Faturamento</p>
-             <p className="text-lg font-semibold text-white">R$ {pool.revenue.toLocaleString('pt-BR')}</p>
+            <p className="text-slate-400 text-xs">Faturamento</p>
+            <p className="text-lg font-semibold text-white">{formatCurrency(convertFromBRL(pool.revenue), visualizationCurrency)}</p>
           </div>
           <div className="border-t md:border-t-0 md:border-l border-slate-700 pt-4 md:pt-0 md:pl-6">
-             <p className="text-slate-400 text-xs">Despesas</p>
-             <p className="text-lg font-semibold text-rose-300">R$ {pool.expenses.toLocaleString('pt-BR')}</p>
+            <p className="text-slate-400 text-xs">Despesas</p>
+            <p className="text-lg font-semibold text-rose-300">{formatCurrency(convertFromBRL(pool.expenses), visualizationCurrency)}</p>
           </div>
           <div className="border-t md:border-t-0 md:border-l border-slate-700 pt-4 md:pt-0 md:pl-6">
-             <p className="text-slate-400 text-xs">Margem</p>
-             <p className="text-lg font-semibold text-blue-300">
-               {pool.revenue > 0 ? ((pool.profit / pool.revenue) * 100).toFixed(1) : 0}%
-             </p>
+            <p className="text-slate-400 text-xs">Margem</p>
+            <p className="text-lg font-semibold text-blue-300">
+              {pool.revenue > 0 ? ((pool.profit / pool.revenue) * 100).toFixed(1) : 0}%
+            </p>
           </div>
         </div>
       </div>
@@ -300,11 +311,11 @@ export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onU
       {isCalculatorOpen && (
         <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-xl animate-fade-in">
           <div className="flex justify-between items-center mb-4">
-             <h3 className="text-lg font-bold text-indigo-900 flex items-center gap-2">
+            <h3 className="text-lg font-bold text-indigo-900 flex items-center gap-2">
               <PieIcon size={18} />
               Calculadora de Distribuição Inteligente
             </h3>
-            <button 
+            <button
               type="button"
               onClick={distributeEqually}
               className="text-sm bg-indigo-200 text-indigo-800 px-3 py-1 rounded-full hover:bg-indigo-300 transition-colors font-medium"
@@ -312,10 +323,10 @@ export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onU
               Dividir Igualmente (1/{members.length})
             </button>
           </div>
-          
+
           <p className="text-sm text-indigo-700 mb-4">
-            Defina "Cotas" (pesos) para cada membro. O sistema calculará a porcentagem automaticamente. 
-            <br/><span className="text-xs opacity-75">Ex: Membro A (2 cotas) e Membro B (1 cota) = 66% / 33%.</span>
+            Defina "Cotas" (pesos) para cada membro. O sistema calculará a porcentagem automaticamente.
+            <br /><span className="text-xs opacity-75">Ex: Membro A (2 cotas) e Membro B (1 cota) = 66% / 33%.</span>
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
@@ -324,8 +335,8 @@ export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onU
                 <span className="font-medium text-slate-700">{m.name}</span>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-400 uppercase">Cotas</span>
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     min="0"
                     placeholder="1"
                     className="w-16 p-1 border border-slate-300 rounded text-center bg-white text-slate-900"
@@ -337,7 +348,7 @@ export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onU
             ))}
           </div>
           <div className="flex justify-end">
-            <button 
+            <button
               type="button"
               onClick={applyWeights}
               className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium"
@@ -358,52 +369,52 @@ export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onU
           <form onSubmit={handleSubmit} className="flex flex-col md:flex-row gap-4 items-end">
             <div className="flex-1 w-full">
               <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Nome Completo</label>
-              <input 
+              <input
                 required
                 type="text"
                 value={formData.name}
-                onChange={e => setFormData({...formData, name: e.target.value})}
+                onChange={e => setFormData({ ...formData, name: e.target.value })}
                 className="w-full p-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-400 outline-none"
                 placeholder="Ex: João Silva"
               />
             </div>
             <div className="flex-1 w-full">
               <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Cargo / Função</label>
-              <input 
+              <input
                 required
                 type="text"
                 value={formData.role}
-                onChange={e => setFormData({...formData, role: e.target.value})}
+                onChange={e => setFormData({ ...formData, role: e.target.value })}
                 className="w-full p-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-400 outline-none"
                 placeholder="Ex: Vendas"
               />
             </div>
             <div className="w-full md:w-32">
               <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">% Lucro</label>
-              <input 
+              <input
                 required
                 type="number"
                 min="0"
                 max="100"
                 step="0.01"
                 value={formData.defaultSharePercent}
-                onChange={e => setFormData({...formData, defaultSharePercent: e.target.value})}
+                onChange={e => setFormData({ ...formData, defaultSharePercent: e.target.value })}
                 className="w-full p-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-400 outline-none"
                 placeholder="0-100"
               />
             </div>
             <div className="flex gap-2 w-full md:w-auto">
               {editingMember && (
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={resetForm}
                   className="px-4 py-2.5 border border-slate-300 bg-white text-slate-600 rounded-lg hover:bg-slate-50 font-medium"
                 >
                   Cancelar
                 </button>
               )}
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 className="px-6 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium flex-1 md:flex-none whitespace-nowrap"
               >
                 {editingMember ? 'Salvar' : 'Adicionar'}
@@ -444,11 +455,11 @@ export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onU
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right font-bold text-emerald-600">
-                      R$ {shareAmount > 0 ? shareAmount.toLocaleString('pt-BR') : '0,00'}
+                      {shareAmount > 0 ? formatCurrency(convertFromBRL(shareAmount), visualizationCurrency) : formatCurrency(0, visualizationCurrency)}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2">
-                        <button 
+                        <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); handleEditClick(member); }}
                           className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded cursor-pointer transition-colors"
@@ -456,7 +467,7 @@ export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onU
                         >
                           <Pencil size={18} className="pointer-events-none" />
                         </button>
-                        <button 
+                        <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); handleDeleteClick(member.id); }}
                           className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded cursor-pointer transition-colors"
@@ -477,7 +488,7 @@ export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onU
                   {Math.abs(totalAllocatedPercent - 100) > 0.1 && <AlertCircleIcon />}
                 </td>
                 <td className="px-6 py-4 text-right text-slate-900">
-                  R$ {((pool.profit * totalAllocatedPercent) / 100).toLocaleString('pt-BR')}
+                  {formatCurrency(convertFromBRL(((pool.profit * totalAllocatedPercent) / 100)), visualizationCurrency)}
                 </td>
                 <td></td>
               </tr>
@@ -487,15 +498,15 @@ export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onU
       </div>
 
       {Math.abs(totalAllocatedPercent - 100) > 0.1 && (
-         <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded shadow-sm text-sm text-amber-800 flex items-center gap-3">
-            <CheckSquare className="text-amber-500" size={20} />
-            <p>
-              <strong>Atenção:</strong> A soma das porcentagens é de <strong>{totalAllocatedPercent.toFixed(2)}%</strong>. 
-              {totalAllocatedPercent < 100 
-                ? ' Ainda falta alocar ' + (100 - totalAllocatedPercent).toFixed(2) + '% do lucro.' 
-                : ' Você alocou mais que 100%, revise as porcentagens.'}
-            </p>
-         </div>
+        <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded shadow-sm text-sm text-amber-800 flex items-center gap-3">
+          <CheckSquare className="text-amber-500" size={20} />
+          <p>
+            <strong>Atenção:</strong> A soma das porcentagens é de <strong>{totalAllocatedPercent.toFixed(2)}%</strong>.
+            {totalAllocatedPercent < 100
+              ? ' Ainda falta alocar ' + (100 - totalAllocatedPercent).toFixed(2) + '% do lucro.'
+              : ' Você alocou mais que 100%, revise as porcentagens.'}
+          </p>
+        </div>
       )}
 
       {/* Service-Based Profit Breakdown */}
@@ -507,33 +518,33 @@ export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onU
         <p className="text-slate-500 mb-6">
           Visualização do lucro individual de cada serviço, baseado nas transações do período selecionado.
         </p>
-        
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {(data.services || []).map(service => {
             const financials = getServiceFinancials(service);
             const participants = service.participants || [];
-            
+
             // If no activity in this period, maybe hide it? Or show with 0s. 
             // Showing all services lets you see which ones had no revenue.
-            
+
             return (
               <div key={service.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                 <div className="flex justify-between items-start mb-3">
                   <h3 className="font-bold text-slate-800">{service.clientName} - {service.title}</h3>
                   <span className={`px-2 py-0.5 rounded text-xs font-semibold ${financials.profit >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                    Lucro Período: R$ {financials.profit.toLocaleString('pt-BR')}
+                    Lucro Período: {formatCurrency(convertFromBRL(financials.profit), visualizationCurrency)}
                   </span>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-4 text-sm mb-4">
-                   <div>
-                     <span className="text-slate-500">Receita:</span>
-                     <span className="ml-2 font-medium text-emerald-600">+ R$ {financials.income.toLocaleString('pt-BR')}</span>
-                   </div>
-                   <div>
-                     <span className="text-slate-500">Despesa:</span>
-                     <span className="ml-2 font-medium text-rose-600">- R$ {financials.expense.toLocaleString('pt-BR')}</span>
-                   </div>
+                  <div>
+                    <span className="text-slate-500">Receita:</span>
+                    <span className="ml-2 font-medium text-emerald-600">+ {formatCurrency(convertFromBRL(financials.income), visualizationCurrency)}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Despesa:</span>
+                    <span className="ml-2 font-medium text-rose-600">- {formatCurrency(convertFromBRL(financials.expense), visualizationCurrency)}</span>
+                  </div>
                 </div>
 
                 <div className="border-t border-slate-100 pt-3">
@@ -542,13 +553,13 @@ export const ProfitShare: React.FC<ProfitShareProps> = ({ data, onAddMember, onU
                     {participants.map(p => {
                       const member = members.find(m => m.id === p.memberId);
                       if (!member) return null;
-                      
+
                       const memberShareAmount = (financials.profit * (p.sharePercent || 0)) / 100;
 
                       return (
                         <li key={p.memberId} className="flex justify-between text-sm">
                           <span className="text-slate-700">{member.name} <span className="text-slate-400 text-xs">({p.sharePercent}%)</span></span>
-                          <span className="font-bold text-slate-900">R$ {memberShareAmount.toLocaleString('pt-BR')}</span>
+                          <span className="font-bold text-slate-900">{formatCurrency(convertFromBRL(memberShareAmount), visualizationCurrency)}</span>
                         </li>
                       );
                     })}

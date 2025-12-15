@@ -1,549 +1,325 @@
-
-import React, { useState, useMemo } from 'react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  LineChart, Line, PieChart, Pie, Cell, Legend, ComposedChart, Area
-} from 'recharts';
-import { AppState, TransactionType, TransactionStatus, OfferStatus, ExpenseCategory } from '../types';
-import { TrendingUp, AlertTriangle, Wallet, Users, Calendar, Sparkles, X, Minus, Maximize2, CheckSquare, BarChart2, Layers, PieChart as PieChartIcon, Activity } from 'lucide-react';
-import { generateFinancialAnalysis } from '../services/geminiService';
+import React, { useState, useEffect } from 'react';
+import { AppState, TransactionType, TransactionStatus, OfferStatus, PayoutModel } from '../types';
+import {
+  DollarSign, TrendingUp, TrendingDown, Users, Briefcase,
+  Calendar, ArrowRight, Activity, Percent
+} from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { DateRangePicker } from './DateRangePicker';
-import { Link } from 'react-router-dom';
+import { CURRENCIES, convertToBRL, fetchExchangeRates, formatCurrency } from '../services/currency';
 
 interface DashboardProps {
   data: AppState;
+  visualizationCurrency: string;
+  setVisualizationCurrency: (currency: string) => void;
 }
 
-// COLORS - STRICT STYLE GUIDE
-const COL_REVENUE = '#3b82f6'; // Blue (Faturamento)
-const COL_EXPENSE = '#f43f5e'; // Red (Despesa)
-const COL_PROFIT = '#10b981';  // Green (Lucro)
-const COL_OTHER = '#94a3b8';   // Slate
-
-export const Dashboard: React.FC<DashboardProps> = ({ data }) => {
-  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
-  const [isAiMinimized, setIsAiMinimized] = useState(false);
-  const [isLoadingAi, setIsLoadingAi] = useState(false);
-  
-  // Filters
+export const Dashboard: React.FC<DashboardProps> = ({
+  data,
+  visualizationCurrency,
+  setVisualizationCurrency
+}) => {
   const [dateFilter, setDateFilter] = useState<'TODAY' | 'WEEK' | 'MONTH' | 'ALL' | 'CUSTOM'>('MONTH');
   const [customDates, setCustomDates] = useState({ start: '', end: '' });
   const [showCustomPicker, setShowCustomPicker] = useState(false);
-  
-  // Grouping Toggle: 'DAILY' (show every day) vs 'GROUPED' (monthly aggregation for long periods)
-  const [viewGrouping, setViewGrouping] = useState<'DAILY' | 'GROUPED'>('DAILY');
+  const [rates, setRates] = useState<Record<string, number>>({});
 
-  // Chart Type State
-  const [chartType, setChartType] = useState<'BAR' | 'LINE' | 'COMBO' | 'PIE'>('BAR');
+  useEffect(() => {
+    fetchExchangeRates().then(setRates);
+  }, []);
 
-  // --- Pending Checks Logic for Banner ---
-  const pendingChecksCount = useMemo(() => {
-    let count = 0;
-    const today = new Date();
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
-    const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+  // --- Helpers ---
+  // If visualizationCurrency is BRL, used conversion 1. 
+  // If USD, we need BRL -> USD. 
+  // Our rates map is Foreign -> BRL (e.g. USD: 6.0).
+  // So to convert BRL to Foreign, we divide by rate.
+  const convertFromBRL = (amountBRL: number) => {
+    if (visualizationCurrency === 'BRL') return amountBRL;
+    const rate = rates[visualizationCurrency] || 1;
+    // Rate is "How many BRL is 1 Foreign". 
+    // So 6 BRL = 1 USD.
+    // 12 BRL = 2 USD.
+    // So BRL / Rate = Foreign.
+    return amountBRL / rate;
+  };
 
-    data.offers.forEach(o => {
-        if (o.status !== OfferStatus.ACTIVE) return;
-        // Check today
-        if (todayStr >= o.startDate && (!o.endDate || todayStr <= o.endDate)) {
-            if (!o.dailyEntries.find(e => e.date === todayStr)) count++;
-        }
-        // Check yesterday
-        if (yesterdayStr >= o.startDate && (!o.endDate || yesterdayStr <= o.endDate)) {
-            if (!o.dailyEntries.find(e => e.date === yesterdayStr)) count++;
-        }
-    });
-    return count;
-  }, [data.offers]);
+  const getFilteredData = () => {
+    const now = new Date();
+    // Reset hours for accurate comparison
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 
-  // --- UNIFIED CHART DATA PROCESSING ---
-  // Merges manual Transactions (Services/Overhead) AND Offer Daily Entries (Revenue/Ads)
-  const processChartData = () => {
-    let start = new Date();
-    let end = new Date();
-    let granularity: 'day' | 'month' = 'day';
+    let start = 0;
+    let end = 0;
 
-    // 1. Determine Range
     if (dateFilter === 'TODAY') {
-        start = new Date(); 
-        end = new Date();
+      start = startOfDay;
+      end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
     } else if (dateFilter === 'WEEK') {
-        const day = start.getDay();
-        const diff = start.getDate() - day + (day === 0 ? -6 : 1); 
-        start.setDate(diff);
-        end = new Date(start);
-        end.setDate(start.getDate() + 6);
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - now.getDay());
+      weekStart.setHours(0, 0, 0, 0);
+      start = weekStart.getTime();
+
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      weekEnd.setHours(23, 59, 59, 999);
+      end = weekEnd.getTime();
     } else if (dateFilter === 'MONTH') {
-        start.setDate(1);
-        end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
-        if (viewGrouping === 'GROUPED') granularity = 'month'; 
+      start = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+      end = new Date(now.getFullYear(), now.getMonth() + 1, 0).setHours(23, 59, 59, 999);
     } else if (dateFilter === 'CUSTOM' && customDates.start && customDates.end) {
-        const [sy, sm, sd] = customDates.start.split('-').map(Number);
-        const [ey, em, ed] = customDates.end.split('-').map(Number);
-        start = new Date(sy, sm - 1, sd);
-        end = new Date(ey, em - 1, ed);
-        if (viewGrouping === 'GROUPED') granularity = 'month';
-    } else if (dateFilter === 'ALL') {
-        if (viewGrouping === 'GROUPED') granularity = 'month';
-        // Calculate min date from both sources
-        let minT = data.transactions.reduce((min, t) => t.date < min ? t.date : min, new Date().toISOString().split('T')[0]);
-        let minO = minT;
-        data.offers.forEach(o => o.dailyEntries.forEach(e => { if(e.date < minO) minO = e.date }));
-        
-        const [y, m, d] = (minO < minT ? minO : minT).split('-').map(Number);
-        start = new Date(y, m - 1, d);
-    }
-
-    // 2. Generate Timeline Map
-    const dataMap = new Map<string, { revenue: number, expense: number, profit: number }>();
-    
-    if (granularity === 'day') {
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-            const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-            dataMap.set(iso, { revenue: 0, expense: 0, profit: 0 });
-        }
+      start = new Date(customDates.start + 'T00:00:00').getTime();
+      end = new Date(customDates.end + 'T23:59:59').getTime();
     } else {
-        let d = new Date(start);
-        d.setDate(1);
-        while (d <= end) {
-            const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-            dataMap.set(monthKey, { revenue: 0, expense: 0, profit: 0 });
-            d.setMonth(d.getMonth() + 1);
-        }
+      // ALL
+      start = 0;
+      end = 32503680000000; // Year 3000
     }
 
-    // 3. Merge Source A: Transactions
-    data.transactions.forEach(t => {
-        let key = t.date;
-        if (granularity === 'month') key = t.date.substring(0, 7);
-
-        if (dataMap.has(key)) {
-            const current = dataMap.get(key)!;
-            if (t.type === TransactionType.INCOME) current.revenue += t.amount;
-            else current.expense += t.amount;
-            current.profit = current.revenue - current.expense;
-        }
+    const txs = data.transactions.filter(t => {
+      const d = new Date(t.date + 'T00:00:00').getTime();
+      return d >= start && d <= end;
     });
 
-    // 4. Merge Source B: Offer Daily Entries
-    data.offers.forEach(offer => {
-        offer.dailyEntries.forEach(entry => {
-            let key = entry.date;
-            if (granularity === 'month') key = entry.date.substring(0, 7);
-            
-            if (dataMap.has(key)) {
-                const current = dataMap.get(key)!;
-                current.revenue += entry.revenue;
-                current.expense += entry.adsSpend;
-                current.profit = current.revenue - current.expense;
-            }
-        });
+    // For offers, we filter daily entries
+    const entries = data.offers.flatMap(o => o.dailyEntries).filter(e => {
+      const d = new Date(e.date + 'T00:00:00').getTime();
+      return d >= start && d <= end;
     });
 
-    // 5. Convert to Array
-    return Array.from(dataMap.entries()).sort().map(([key, val]) => {
-        let label = key;
-        if (granularity === 'day') {
-             const [y, m, d] = key.split('-').map(Number);
-             const dateObj = new Date(y, m - 1, d);
-             if (dateFilter === 'WEEK') {
-                 label = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' });
-                 label = label.charAt(0).toUpperCase() + label.slice(1);
-             } else if (dateFilter === 'MONTH') {
-                 label = String(d);
-             } else {
-                 label = `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
-             }
-        } else {
-             const [y, m] = key.split('-').map(Number);
-             const dateObj = new Date(y, m - 1, 1);
-             label = dateObj.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
-        }
-
-        return {
-            name: label,
-            faturamento: val.revenue,
-            despesa: val.expense,
-            lucro: val.profit
-        };
-    });
+    return { txs, entries };
   };
 
-  const chartData = useMemo(() => processChartData(), [data.transactions, data.offers, dateFilter, customDates, viewGrouping]);
+  const { txs, entries } = getFilteredData();
 
-  // Calculations for Totals (Aggregated)
-  const aggregatedTotals = useMemo(() => {
-     return chartData.reduce((acc, curr) => ({
-        revenue: acc.revenue + curr.faturamento,
-        expense: acc.expense + curr.despesa,
-        profit: acc.profit + curr.lucro
-     }), { revenue: 0, expense: 0, profit: 0 });
-  }, [chartData]);
+  // --- Calculations (BRL Base) ---
+  const income = txs.filter(t => t.type === TransactionType.INCOME).reduce((acc, t) => acc + t.amount, 0);
+  const expense = txs.filter(t => t.type === TransactionType.EXPENSE).reduce((acc, t) => acc + t.amount, 0);
 
-  const totalRevenue = aggregatedTotals.revenue;
-  const netProfit = aggregatedTotals.profit;
-  const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+  // Offer Stats (Revenue vs Profit)
+  const offerRevenue = entries.reduce((acc, e) => acc + e.revenue, 0);
+  const offerAds = entries.reduce((acc, e) => acc + e.adsSpend, 0);
+  const offerProfit = entries.reduce((acc, e) => acc + e.netProfit, 0);
+  const teamShare = entries.reduce((acc, e) => acc + e.teamShare, 0);
+  const companyShare = offerProfit - teamShare;
 
-  // Pending Income (Transactions only, Offers are usually settled daily)
-  const pendingIncome = data.transactions
-    .filter(t => t.type === TransactionType.INCOME && t.status === TransactionStatus.PENDING)
-    .reduce((acc, t) => acc + t.amount, 0);
+  // Combined (Offers are separate? Or included in Transactions? 
+  // In this system, "Offers" logic is usually separate for tracking, 
+  // but actual payouts/receipts might be in transactions.
+  // For "General Summary", we usually sum everything.
+  // Assuming Transactions include "Other" income/expenses + Offer Payouts if manually entered.
+  // But purely for "Dashboard", let's show the aggregation of the "Offer/Operation" side vs "Cash Flow" side.
+  // Let's stick to the requested "General Summary" which likely shows High Level KPIs.
 
-  // --- Pie Chart Logic (Aggregated) ---
-  const pieData = useMemo(() => {
-     // Breakdown: Marketing (Ads from offers + Manual Ads), Other Expenses, Profit
-     // 1. Calculate total ads from offers
-     const offerAds = data.offers.reduce((sum, o) => sum + o.dailyEntries.reduce((s, e) => s + e.adsSpend, 0), 0);
-     // 2. Calculate manual ads
-     const manualAds = data.transactions
-        .filter(t => t.type === TransactionType.EXPENSE && t.category === ExpenseCategory.MARKETING)
-        .reduce((sum, t) => sum + t.amount, 0);
-     
-     const totalAds = offerAds + manualAds;
-     const otherExpenses = aggregatedTotals.expense - totalAds;
-     const profitSlice = Math.max(0, netProfit);
-     
-     return [
-        { name: 'Lucro Líquido', value: profitSlice, color: COL_PROFIT },
-        { name: 'Ads / Marketing', value: totalAds, color: COL_EXPENSE },
-        { name: 'Outras Despesas', value: otherExpenses, color: '#f59e0b' } // Amber for others
-     ].filter(d => d.value > 0);
-  }, [aggregatedTotals, data.transactions, data.offers, netProfit]);
+  // Update: User asked to switch visualization currency.
+  // We calculate everything in BRL then convert at the end.
+
+  const displayIncome = convertFromBRL(income);
+  const displayExpense = convertFromBRL(expense);
+  const displayBalance = displayIncome - displayExpense;
+
+  const displayOfferRevenue = convertFromBRL(offerRevenue);
+  const displayOfferProfit = convertFromBRL(offerProfit);
+  const displayTeamShare = convertFromBRL(teamShare);
+  const displayCompanyShare = convertFromBRL(companyShare);
 
 
-  const handleAiAnalysis = async () => {
-    setIsLoadingAi(true);
-    setAiAnalysis(null);
-    setIsAiMinimized(false);
-    // Prepare condensed data for AI
-    const analysisData = {
-        totalRevenue,
-        totalExpense: aggregatedTotals.expense,
-        netProfit,
-        margin,
-        servicesCount: data.services.length,
-        offersCount: data.offers.length,
-        pendingIncome
-    };
-    const result = await generateFinancialAnalysis({ ...data, transactions: [] }); // Sending full state might be too big, but let's try or simplified
-    setAiAnalysis(result);
-    setIsLoadingAi(false);
-  };
+  // --- Chart Data ---
+  // Group by date
+  const chartMap = new Map<string, { date: string, income: number, expense: number }>();
+  // Init with range? For simplicity, just data points.
+  txs.forEach(t => {
+    const existing = chartMap.get(t.date) || { date: t.date, income: 0, expense: 0 };
+    if (t.type === TransactionType.INCOME) existing.income += t.amount;
+    else existing.expense += t.amount;
+    chartMap.set(t.date, existing);
+  });
+  const chartData = Array.from(chartMap.values())
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map(d => ({
+      ...d,
+      income: convertFromBRL(d.income),
+      expense: convertFromBRL(d.expense)
+    }));
+
 
   return (
     <div className="space-y-6">
-      
-      {/* Pending Check Banner */}
-      {pendingChecksCount > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between shadow-sm animate-fade-in">
-              <div className="flex items-center gap-3">
-                  <div className="bg-amber-100 p-2 rounded-full">
-                      <CheckSquare className="text-amber-600" size={20} />
-                  </div>
-                  <div>
-                      <h4 className="font-bold text-amber-900">Atenção Necessária</h4>
-                      <p className="text-sm text-amber-700">
-                          Você possui <span className="font-bold">{pendingChecksCount} registros pendentes</span> na checagem diária (Hoje/Ontem).
-                      </p>
-                  </div>
-              </div>
-              <Link to="/checagem" className="bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-amber-700 transition-colors">
-                  Resolver Agora
-              </Link>
-          </div>
-      )}
-
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      {/* Header & Controls */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Resumo Geral (Consolidado)</h1>
-          <p className="text-slate-500">Unificação de Ofertas + Serviços + Fluxo de Caixa</p>
+          <h1 className="text-2xl font-bold text-slate-900">Visão Geral</h1>
+          <p className="text-slate-500">Resumo financeiro e performance</p>
         </div>
 
-        <div className="flex flex-col items-end gap-2 relative">
-            <div className="flex bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Currency Selector */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-white rounded-lg border border-slate-200 shadow-sm">
+            <DollarSign size={16} className="text-slate-400" />
+            <select
+              value={visualizationCurrency}
+              onChange={(e) => setVisualizationCurrency(e.target.value)}
+              className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer"
+            >
+              {CURRENCIES.map(c => (
+                <option key={c.code} value={c.code}>{c.code}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Date Filter */}
+          <div className="flex bg-slate-100 border border-slate-200 rounded-lg p-1 relative">
             {['TODAY', 'WEEK', 'MONTH', 'ALL'].map((f) => (
-                <button
-                    key={f}
-                    type="button"
-                    onClick={() => {
-                        setDateFilter(f as any);
-                        setShowCustomPicker(false);
-                    }}
-                    className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${
-                    dateFilter === f ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'
-                    }`}
-                >
-                    {f === 'TODAY' ? 'Hoje' : f === 'WEEK' ? 'Semana' : f === 'MONTH' ? 'Mês' : 'Tudo'}
-                </button>
+              <button
+                key={f}
+                onClick={() => {
+                  setDateFilter(f as any);
+                  setShowCustomPicker(false);
+                }}
+                className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${dateFilter === f ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-200'
+                  }`}
+              >
+                {f === 'TODAY' ? 'Hoje' : f === 'WEEK' ? 'Semana' : f === 'MONTH' ? 'Mês' : 'Tudo'}
+              </button>
             ))}
             <button
-                type="button"
-                onClick={(e) => {
-                    e.stopPropagation();
-                    setShowCustomPicker(!showCustomPicker);
-                }}
-                className={`px-3 py-1 rounded transition-colors flex items-center justify-center ${
-                    showCustomPicker ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowCustomPicker(!showCustomPicker);
+              }}
+              className={`px-3 py-1 rounded transition-colors flex items-center justify-center ${showCustomPicker ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-200'
                 }`}
-                title="Período Personalizado"
+              title="Período Personalizado"
             >
-                <Calendar size={14} />
+              <Calendar size={14} />
             </button>
-            </div>
-
             {showCustomPicker && (
-                 <DateRangePicker 
-                  startDate={customDates.start}
-                  endDate={customDates.end}
-                  onChange={(start, end) => {
-                    setCustomDates({ start, end });
-                  }}
-                  onClose={() => setShowCustomPicker(false)}
-                  onApply={() => { setShowCustomPicker(false); setDateFilter('CUSTOM'); }}
-                />
+              <DateRangePicker
+                startDate={customDates.start}
+                endDate={customDates.end}
+                onChange={(start, end) => {
+                  setCustomDates({ start, end });
+                }}
+                onClose={() => setShowCustomPicker(false)}
+                onApply={() => { setShowCustomPicker(false); setDateFilter('CUSTOM'); }}
+              />
             )}
-        </div>
-      </div>
-
-      <div className="flex justify-end">
-        <button 
-          onClick={handleAiAnalysis}
-          disabled={isLoadingAi}
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg shadow-md hover:shadow-lg transition-all disabled:opacity-50"
-        >
-          <Sparkles size={16} />
-          {isLoadingAi ? 'Analisando...' : 'IA: Gerar Relatório'}
-        </button>
-      </div>
-
-      {/* AI Insight Box */}
-      {aiAnalysis && (
-        <div className={`bg-white border border-indigo-100 rounded-xl shadow-sm relative ring-1 ring-indigo-50 transition-all duration-300 ${isAiMinimized ? 'p-3' : 'p-6'}`}>
-          <div className="flex justify-between items-start mb-2">
-             <h3 className="text-lg font-bold text-indigo-900 flex items-center gap-2">
-                <Sparkles size={18} className="text-indigo-500" />
-                Análise Inteligente
-            </h3>
-            <div className="flex items-center gap-1">
-                <button
-                    onClick={() => setIsAiMinimized(!isAiMinimized)}
-                    className="text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 p-1.5 rounded-full transition-all"
-                    title={isAiMinimized ? "Expandir Relatório" : "Minimizar Relatório"}
-                    type="button"
-                >
-                   {isAiMinimized ? <Maximize2 size={18} /> : <Minus size={18} />}
-                </button>
-                <button
-                    onClick={() => { setAiAnalysis(null); setIsAiMinimized(false); }}
-                    className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-1.5 rounded-full transition-all"
-                    title="Fechar Relatório"
-                    type="button"
-                >
-                    <X size={18} />
-                </button>
-            </div>
           </div>
-          
-          {!isAiMinimized && (
-            <div className="prose prose-indigo prose-sm text-slate-700 whitespace-pre-line max-w-none animate-fade-in mt-4 border-t border-indigo-50 pt-4">
-                {aiAnalysis}
-            </div>
-          )}
-          {isAiMinimized && (
-            <p className="text-xs text-slate-400 mt-1 cursor-pointer hover:text-indigo-500 transition-colors" onClick={() => setIsAiMinimized(false)}>
-                Relatório minimizado. Clique para expandir.
-            </p>
-          )}
         </div>
-      )}
+      </div>
 
-      {/* KPI Cards (CONSOLIDATED) */}
+      {/* Main Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Faturamento - BLUE */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm font-medium text-slate-500">Faturamento Global</p>
-              <h3 className="text-2xl font-bold text-blue-600 mt-1">R$ {totalRevenue.toLocaleString('pt-BR')}</h3>
-            </div>
-            <div className="p-2 bg-blue-100 rounded-lg text-blue-600">
-              <TrendingUp size={20} />
-            </div>
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+          <div className="flex justify-between items-start mb-4">
+            <div className="bg-blue-100 p-3 rounded-lg text-blue-600"><Briefcase size={24} /></div>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Resultado Líquido</span>
           </div>
-          <p className="text-xs text-slate-400 mt-2 font-medium">Serviços + Ofertas + Outros</p>
+          <h3 className={`text-2xl font-bold ${displayCompanyShare >= 0 ? 'text-slate-900' : 'text-rose-600'}`}>
+            {formatCurrency(displayCompanyShare, visualizationCurrency)}
+          </h3>
+          <p className="text-sm text-slate-500 mt-1">Lucro da Operação (Share da Empresa)</p>
         </div>
 
-        {/* Lucro - GREEN */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm font-medium text-slate-500">Lucro Líquido</p>
-              <h3 className="text-2xl font-bold text-emerald-600 mt-1">R$ {netProfit.toLocaleString('pt-BR')}</h3>
-            </div>
-            <div className="p-2 bg-emerald-100 rounded-lg text-emerald-600">
-              <Wallet size={20} />
-            </div>
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+          <div className="flex justify-between items-start mb-4">
+            <div className="bg-emerald-100 p-3 rounded-lg text-emerald-600"><TrendingUp size={24} /></div>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Faturamento (Ofertas)</span>
           </div>
-          <p className="text-xs text-slate-500 mt-2">Margem atual: <span className="font-bold text-slate-700">{margin.toFixed(1)}%</span></p>
+          <h3 className="text-2xl font-bold text-slate-900">
+            {formatCurrency(displayOfferRevenue, visualizationCurrency)}
+          </h3>
+          <p className="text-sm text-slate-500 mt-1">Soma das vendas brutas</p>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm font-medium text-slate-500">A Receber (Pendente)</p>
-              <h3 className="text-2xl font-bold text-slate-900 mt-1">R$ {pendingIncome.toLocaleString('pt-BR')}</h3>
-            </div>
-            <div className="p-2 bg-amber-100 rounded-lg text-amber-600">
-              <AlertTriangle size={20} />
-            </div>
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+          <div className="flex justify-between items-start mb-4">
+            <div className="bg-purple-100 p-3 rounded-lg text-purple-600"><Users size={24} /></div>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Repasse Equipe</span>
           </div>
-          <p className="text-xs text-amber-600 mt-2 font-medium">Transações manuais em aberto</p>
+          <h3 className="text-2xl font-bold text-slate-900">
+            {formatCurrency(displayTeamShare, visualizationCurrency)}
+          </h3>
+          <p className="text-sm text-slate-500 mt-1">Comissões e participações</p>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm font-medium text-slate-500">Projetos Ativos</p>
-              <h3 className="text-2xl font-bold text-slate-900 mt-1">{data.services.length + data.offers.length}</h3>
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+          <div className="flex justify-between items-start mb-4">
+            <div className={`p-3 rounded-lg ${displayBalance >= 0 ? 'bg-slate-100 text-slate-600' : 'bg-rose-100 text-rose-600'}`}>
+              <Activity size={24} />
             </div>
-            <div className="p-2 bg-purple-100 rounded-lg text-purple-600">
-              <Users size={20} />
-            </div>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Fluxo de Caixa</span>
           </div>
-          <p className="text-xs text-slate-500 mt-2">
-            {data.services.filter(s => s.status === 'ONGOING').length} Serviços + {data.offers.filter(o => o.status === OfferStatus.ACTIVE).length} Ofertas
-          </p>
+          <h3 className={`text-2xl font-bold ${displayBalance >= 0 ? 'text-slate-900' : 'text-rose-600'}`}>
+            {formatCurrency(displayBalance, visualizationCurrency)}
+          </h3>
+          <p className="text-sm text-slate-500 mt-1">Receitas - Despesas (Geral)</p>
         </div>
       </div>
 
-      {/* Main Charts Area */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-             <div className="flex items-center gap-4">
-                 <h3 className="text-lg font-semibold text-slate-800">
-                     Performance Financeira Consolidada
-                 </h3>
-                 {/* Grouping Toggle */}
-                 {(dateFilter === 'MONTH' || dateFilter === 'ALL' || dateFilter === 'CUSTOM') && (
-                     <div className="flex bg-slate-100 rounded-lg p-1">
-                        <button 
-                           onClick={() => setViewGrouping('DAILY')}
-                           className={`px-2 py-1 rounded text-xs font-medium flex items-center gap-1 ${viewGrouping === 'DAILY' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}
-                        >
-                            <BarChart2 size={12} /> Diário
-                        </button>
-                        <button 
-                           onClick={() => setViewGrouping('GROUPED')}
-                           className={`px-2 py-1 rounded text-xs font-medium flex items-center gap-1 ${viewGrouping === 'GROUPED' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}
-                        >
-                            <Layers size={12} /> Mensal
-                        </button>
-                     </div>
-                 )}
-             </div>
-             
-             {/* Chart Type Switcher */}
-             <div className="flex bg-slate-100 rounded-lg p-1">
-                <button 
-                  onClick={() => setChartType('BAR')}
-                  className={`p-1.5 rounded transition-all ${chartType === 'BAR' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
-                  title="Gráfico de Barras"
-                >
-                  <BarChart2 size={16} />
-                </button>
-                <button 
-                  onClick={() => setChartType('LINE')}
-                  className={`p-1.5 rounded transition-all ${chartType === 'LINE' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
-                  title="Gráfico de Linhas"
-                >
-                  <TrendingUp size={16} />
-                </button>
-                <button 
-                  onClick={() => setChartType('COMBO')}
-                  className={`p-1.5 rounded transition-all ${chartType === 'COMBO' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
-                  title="Combinado"
-                >
-                  <Activity size={16} />
-                </button>
-                <button 
-                  onClick={() => setChartType('PIE')}
-                  className={`p-1.5 rounded transition-all ${chartType === 'PIE' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
-                  title="Distribuição (Pizza)"
-                >
-                  <PieChartIcon size={16} />
-                </button>
-             </div>
-          </div>
-
-          <div className="h-80 w-full">
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <h3 className="text-lg font-bold text-slate-900 mb-6">Fluxo de Caixa ({visualizationCurrency})</h3>
+          <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              {/* RENDER BASED ON CHART TYPE */}
-              {chartType === 'BAR' ? (
-                <BarChart data={chartData}>
-                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} interval="preserveStartEnd" />
-                   <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} tickFormatter={(value) => `R$${value/1000}k`} domain={[0, 'auto']} />
-                   <Tooltip 
-                      cursor={{ fill: '#f1f5f9' }}
-                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                      formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']}
-                   />
-                   <Bar dataKey="faturamento" name="Faturamento" fill={COL_REVENUE} radius={[4, 4, 0, 0]} barSize={20} fillOpacity={0.9} />
-                   <Bar dataKey="despesa" name="Despesa" fill={COL_EXPENSE} radius={[4, 4, 0, 0]} barSize={20} fillOpacity={0.9} />
-                </BarChart>
-              ) : chartType === 'LINE' ? (
-                <LineChart data={chartData}>
-                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} interval="preserveStartEnd" />
-                   <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} tickFormatter={(value) => `R$${value/1000}k`} domain={[0, 'auto']} />
-                   <Tooltip 
-                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                      formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']}
-                   />
-                   <Line type="monotone" dataKey="faturamento" name="Faturamento" stroke={COL_REVENUE} strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
-                   <Line type="monotone" dataKey="despesa" name="Despesa" stroke={COL_EXPENSE} strokeWidth={3} dot={false} />
-                   <Line type="monotone" dataKey="lucro" name="Lucro Líquido" stroke={COL_PROFIT} strokeWidth={3} dot={false} />
-                </LineChart>
-              ) : chartType === 'PIE' ? (
-                <PieChart>
-                   <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={80}
-                      outerRadius={110}
-                      paddingAngle={4}
-                      dataKey="value"
-                   >
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                   </Pie>
-                   <Tooltip formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR')}`} />
-                   <Legend verticalAlign="middle" align="right" layout="vertical" iconType="circle" />
-                </PieChart>
-              ) : (
-                // COMBO (Default/Old Composed)
-                <ComposedChart data={chartData}>
-                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} interval="preserveStartEnd" />
-                   <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} tickFormatter={(value) => `R$${value/1000}k`} domain={[0, 'auto']} />
-                   <Tooltip 
-                      cursor={{ fill: '#f1f5f9' }}
-                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                      formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']}
-                   />
-                   <Bar dataKey="faturamento" name="Faturamento" fill={COL_REVENUE} radius={[4, 4, 0, 0]} barSize={20} fillOpacity={0.9} />
-                   <Bar dataKey="despesa" name="Despesa" fill={COL_EXPENSE} radius={[4, 4, 0, 0]} barSize={20} fillOpacity={0.9} />
-                   <Line type="monotone" dataKey="lucro" name="Lucro Líquido" stroke={COL_PROFIT} strokeWidth={3} dot={{ r: 3, fill: COL_PROFIT, strokeWidth: 2, stroke: '#fff' }} />
-                </ComposedChart>
-              )}
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.1} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.1} />
+                    <stop offset="95%" stopColor="#f43f5e" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} tickFormatter={(val) => new Date(val).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} tickFormatter={(val) => `R$ ${val / 1000}k`} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                  formatter={(val: number) => formatCurrency(val, visualizationCurrency)}
+                  labelFormatter={(label) => new Date(label).toLocaleDateString('pt-BR')}
+                />
+                <Area type="monotone" dataKey="income" name="Entradas" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorIncome)" />
+                <Area type="monotone" dataKey="expense" name="Saídas" stroke="#f43f5e" strokeWidth={2} fillOpacity={1} fill="url(#colorExpense)" />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <h3 className="text-lg font-bold text-slate-900 mb-6">Resumo Operacional</h3>
+          <div className="space-y-6">
+            <div>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="text-slate-500">Margem de Lucro</span>
+                <span className="font-bold text-slate-900">
+                  {offerRevenue > 0 ? ((offerProfit / offerRevenue) * 100).toFixed(1) : 0}%
+                </span>
+              </div>
+              <div className="w-full bg-slate-100 rounded-full h-2">
+                <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${offerRevenue > 0 ? Math.min((offerProfit / offerRevenue) * 100, 100) : 0}%` }}></div>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-slate-500">Receita Bruta</span>
+                <span className="text-sm font-medium text-slate-900">{formatCurrency(displayOfferRevenue, visualizationCurrency)}</span>
+              </div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-slate-500">Investimento (Ads)</span>
+                <span className="text-sm font-medium text-rose-600">-{formatCurrency(convertFromBRL(offerAds), visualizationCurrency)}</span>
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t border-slate-50">
+                <span className="text-sm font-bold text-slate-700">Lucro Bruto</span>
+                <span className="text-sm font-bold text-emerald-600">{formatCurrency(displayOfferProfit, visualizationCurrency)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

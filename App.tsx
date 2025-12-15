@@ -105,6 +105,8 @@ const App: React.FC = () => {
   }, [loading, data.subscriptions]);
 
 
+  const [visualizationCurrency, setVisualizationCurrency] = useState('BRL');
+
   // --- Global Pending Checks Counter ---
   const pendingChecksCount = useMemo(() => {
     let count = 0;
@@ -385,7 +387,13 @@ const App: React.FC = () => {
       <ErrorBoundary>
         <Layout pendingCount={pendingChecksCount}>
           <Routes>
-            <Route path="/" element={<Dashboard data={data} />} />
+            <Route path="/" element={
+              <Dashboard
+                data={data}
+                visualizationCurrency={visualizationCurrency}
+                setVisualizationCurrency={setVisualizationCurrency}
+              />
+            } />
             <Route path="/financeiro" element={
               <Financials
                 data={data}
@@ -395,6 +403,7 @@ const App: React.FC = () => {
                 onAddSubscription={addSubscription}
                 onUpdateSubscription={updateSubscription}
                 onDeleteSubscription={deleteSubscription}
+                visualizationCurrency={visualizationCurrency}
               />
             } />
             <Route path="/servicos" element={
@@ -406,6 +415,7 @@ const App: React.FC = () => {
                 onAddTransaction={addTransaction}
                 onUpdateTransaction={updateTransaction}
                 onDeleteTransaction={deleteTransaction}
+                visualizationCurrency={visualizationCurrency}
               />
             } />
             <Route path="/ofertas" element={
@@ -414,6 +424,7 @@ const App: React.FC = () => {
                 onAddOffer={addOffer}
                 onUpdateOffer={updateOffer}
                 onDeleteOffer={deleteOffer}
+                visualizationCurrency={visualizationCurrency}
               />
             } />
             <Route path="/lucros" element={
@@ -422,9 +433,10 @@ const App: React.FC = () => {
                 onAddMember={addMember}
                 onUpdateMember={updateMember}
                 onDeleteMember={deleteMember}
+                visualizationCurrency={visualizationCurrency}
               />
             } />
-            <Route path="/checagem" element={<DailyCheck data={data} onUpdateOffer={updateOffer} />} />
+            <Route path="/checagem" element={<DailyCheck data={data} onUpdateOffer={updateOffer} visualizationCurrency={visualizationCurrency} />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Layout>

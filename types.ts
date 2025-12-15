@@ -46,7 +46,9 @@ export enum BillingCycle {
 export interface Subscription {
   id: string;
   name: string; // Ex: Adobe Creative Cloud, Server
-  amount: number;
+  amount: number; // Converted BRL amount
+  currency?: string; // New: Original currency code (e.g. 'USD')
+  originalAmount?: number; // New: Original amount in foreign currency
   billingCycle: BillingCycle;
   firstPaymentDate: string; // New: The start date of the subscription contract
   nextPaymentDate: string;
@@ -85,17 +87,21 @@ export interface Offer {
   name: string;
   description?: string;
   status: OfferStatus;
-  
+
   // Configuration
   payoutModel: PayoutModel;
   teamPotPercent: number; // Global % allocated to the team (Hierarchy top level)
   participants: OfferParticipant[];
-  
+
+  // Currency
+  currency?: string; // New: Original currency code
+  originalAmount?: number; // New: Original amount
+
   // Data
   dailyEntries: DailyEntry[];
   startDate: string;
   endDate?: string;
-  
+
   active: boolean; // Legacy flag, kept for compatibility, sync with status
 }
 
@@ -118,9 +124,11 @@ export interface Service {
   clientName: string;
   value: number; // Total contract value
   amountPaid: number; // How much has been received so far
+  currency?: string; // New
+  originalAmount?: number; // New: Original contract value
   status: ServiceStatus;
   offerId?: string;
-  
+
   // New detailed fields
   participants: ServiceParticipant[];
   steps: ServiceStep[];
@@ -134,7 +142,9 @@ export interface Transaction {
   type: TransactionType;
   category: ExpenseCategory | string;
   description: string;
-  amount: number;
+  amount: number; // Converted BRL amount
+  currency?: string; // New: Original currency code
+  originalAmount?: number; // New: Original amount in foreign currency
   status: TransactionStatus;
   serviceId?: string;
   offerId?: string;
